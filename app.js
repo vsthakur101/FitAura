@@ -20,6 +20,7 @@ const nutritionRoutes = require('./routes/nutritionRoutes');
 const progressRoutes = require('./routes/progressRoutes');
 const prRoutes = require('./routes/prRoutes');
 const trainerRoutes = require('./routes/trainerRoutes');
+const scheduleRoutes = require('./routes/scheduleRoutes');
 
 // MIDDLEWARES
 app.use(express.json());
@@ -49,6 +50,7 @@ app.use('/api/v1/nutrition-logs', nutritionRoutes);
 app.use('/api/v1/progress-logs', progressRoutes);
 app.use('/api/v1/pr-logs', prRoutes);
 app.use('/api/v1/trainer', trainerRoutes);
+app.use('/api/v1/schedule', scheduleRoutes);
 
 // 404 handler
 app.use((req, res) => {
