@@ -13,10 +13,10 @@ exports.logError = (label, error) => {
     console.error(`[${label}]`, error.message);
 };
 
-exports.handleError = (res, error, fallbackMessage = 'Internal Server Error') => {
-    console.error(error); // You can replace with winston/Sentry logger
-    res.status(500).json({
-        message: fallbackMessage,
-        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+exports.handleError = (res, message, err) => {
+    console.error(`[ERROR] ${message}:`, err); // for terminal
+    return res.status(500).json({
+        message,
+        error: err.message
     });
 };
