@@ -2,24 +2,24 @@ const express = require('express');
 const router = express.Router();
 
 const {
-    getNutritionLogs,
-    addNutritionLog,
-    updateNutritionLog,
-    deleteNutritionLog
-} = require('../controllers/nutritionController');
+    getPRLogs,
+    addPRLog,
+    updatePRLog,
+    deletePRLog
+} = require('../controllers/prController');
 
 const { verifyToken } = require('../middlewares/authMiddleware');
 
 // ─────────────────────────────────────────────
-// 🍽️ Nutrition Log Routes
+// 🏋️‍♂️ Personal Record (PR) Log Routes
 // ─────────────────────────────────────────────
 
-// Fetch all logs for a user
-router.get('/:userId', verifyToken, getNutritionLogs);
+// Fetch all PR logs for a user
+router.get('/:userId', verifyToken, getPRLogs);
 
-// CRUD for individual log entries
-router.post('/', verifyToken, addNutritionLog);
-router.put('/:id', verifyToken, updateNutritionLog);
-router.delete('/:id', verifyToken, deleteNutritionLog);
+// CRUD operations
+router.post('/', verifyToken, addPRLog);
+router.put('/:id', verifyToken, updatePRLog);
+router.delete('/:id', verifyToken, deletePRLog);
 
 module.exports = router;

@@ -1,7 +1,17 @@
 const knex = require('../config/db');
+const Joi = require('joi');
+
+// Validation Schemas
+const updateProfileSchema = Joi.object({
+  name: Joi.string().optional(),
+  bio: Joi.string().allow('').optional(),
+  dob: Joi.date().optional(),
+  gender: Joi.string().valid('male', 'female', 'other').optional()
+});
 
 exports.getUserById = async (req, res) => {
-  const userId = req.params.id;
+  const userId = parseInt(req.params.id);
+  if (isNaN(userId)) return res.status(400).json({ message: 'Invalid user ID' });
 
   try {
     const user = await knex('users')
@@ -18,21 +28,30 @@ exports.getUserById = async (req, res) => {
 };
 
 exports.updateUserProfile = async (req, res) => {
-  const userId = req.params.id;
-  const { name, bio, dob, gender } = req.body;
+  const userId = parseInt(req.params.id);
+  if (isNaN(userId)) return res.status(400).json({ message: 'Invalid user ID' });
+
+  const { error, value } = updateProfileSchema.validate(req.body);
+  if (error) return res.status(400).json({ message: error.message });
 
   try {
-    await knex('users')
+    const updated = await knex('users')
       .where({ id: userId })
-      .update({ name, bio, dob, gender, updated_at: new Date() });
+      .update({ ...value, updated_at: new Date() });
+
+    if (updated === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
 
     res.json({ message: 'User profile updated successfully' });
   } catch (err) {
     res.status(500).json({ message: 'Error updating profile', error: err.message });
   }
 };
+
 exports.uploadProfilePhoto = async (req, res) => {
-  const userId = req.params.id;
+  const userId = parseInt(req.params.id);
+  if (isNaN(userId)) return res.status(400).json({ message: 'Invalid user ID' });
 
   if (!req.file) {
     return res.status(400).json({ message: 'No file received' });
@@ -41,19 +60,24 @@ exports.uploadProfilePhoto = async (req, res) => {
   try {
     const imageUrl = req.file.path;
 
-    await knex('users')
+    const updated = await knex('users')
       .where({ id: userId })
       .update({ profile_photo: imageUrl, updated_at: new Date() });
 
-    res.json({ message: 'Photo uploaded to Cloudinary', url: imageUrl });
+    if (updated === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    res.json({ message: 'Photo uploaded successfully', url: imageUrl });
   } catch (err) {
     res.status(500).json({ message: 'Upload failed', error: err.message });
   }
 };
 
-// ✅ Get Progress Logs
 exports.getUserProgress = async (req, res) => {
-  const userId = req.params.id;
+  const userId = parseInt(req.params.id);
+  if (isNaN(userId)) return res.status(400).json({ message: 'Invalid user ID' });
+
   try {
     const logs = await knex('progress_logs')
       .where({ user_id: userId })
@@ -65,9 +89,10 @@ exports.getUserProgress = async (req, res) => {
   }
 };
 
-// ✅ Get Nutrition Logs
 exports.getUserNutrition = async (req, res) => {
-  const userId = req.params.id;
+  const userId = parseInt(req.params.id);
+  if (isNaN(userId)) return res.status(400).json({ message: 'Invalid user ID' });
+
   try {
     const logs = await knex('nutrition_logs')
       .where({ user_id: userId })

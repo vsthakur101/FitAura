@@ -1,0 +1,362 @@
+openapi: 3.0.0
+info:
+  title: FitAura Full API Collection
+  version: 1.0.0
+paths:
+  /auth/signup:
+    post:
+      summary: Register with phone/email
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              name: Vidhya
+              email: vidhya@example.com
+              password: '123456'
+              role: trainer
+  /auth/login:
+    post:
+      summary: Login with credentials
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              email: vidhya@example.com
+              password: '123456'
+  /auth/me:
+    get:
+      summary: Get logged-in user profile
+      responses:
+        '200':
+          description: Successful response
+  /auth/change-password:
+    put:
+      summary: OTP verification
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              oldPassword: '123456'
+              newPassword: newpass@789
+  /auth/forgot-password:
+    post:
+      summary: OTP verification
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              email: vidhya@example.com
+  /auth/reset-password:
+    post:
+      summary: OTP verification
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MSwiaWF0IjoxNzQ0NzAwNTU4LCJleHAiOjE3NDQ3MDExNTh9.1x4nHJnVo_3dE7J1HhZqo3A6IJiO5ZB-BLajIrpsalo
+              newPassword: 123newpassword
+  /auth/send-otp:
+    post:
+      summary: ''
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              phone: '9876543210'
+  /auth/verify-otp:
+    post:
+      summary: OTP verification
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              phone: '9876543210'
+              otp: '957831'
+  /auth/logout:
+    post:
+      summary: Logout and invalidate token
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              sample: data
+  /users/1:
+    get:
+      summary: Get user profile by ID
+      responses:
+        '200':
+          description: Successful response
+    put:
+      summary: Update user profile
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              name: Vidhya Sagar
+              bio: Frontend Dev & Fitness Enthusiast
+              dob: '2000-01-01'
+              gender: male
+  /users/1/profile-photo:
+    put:
+      summary: Update user profile
+      responses:
+        '200':
+          description: Successful response
+  /users/1/nutrition:
+    get:
+      summary: Get user's nutrition logs
+      responses:
+        '200':
+          description: Successful response
+  /users/1/progress:
+    get:
+      summary: Get user progress logs
+      responses:
+        '200':
+          description: Successful response
+  /users/1/workout-plans:
+    get:
+      summary: Get all public plans
+      responses:
+        '200':
+          description: Successful response
+  /workout-plans/2:
+    get:
+      summary: Get workout plan details
+      responses:
+        '200':
+          description: Successful response
+    put:
+      summary: Update plan
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              title: Updated Push-Pull-Legs Plan
+              goal: Strength Building
+              duration_weeks: 6
+              level: advanced
+    delete:
+      summary: Delete plan
+      responses:
+        '200':
+          description: Successful response
+  /users/2/workout-plans:
+    post:
+      summary: Create new plan (trainer only)
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              title: My Shredding Plan
+              goal: Fat Loss
+              duration_weeks: 4
+              level: intermediate
+              days:
+              - day_number: 1
+                title: Upper Body
+                notes: Focus on compound lifts
+                exercises:
+                - name: Bench Press
+                  sets: 4
+                  reps: 8-10
+                  rest_period: 90s
+                  notes: ''
+                - name: Pull-Ups
+                  sets: 3
+                  reps: Max
+                  rest_period: 60s
+                  notes: Wide grip
+              - day_number: 2
+                title: Lower Body
+                notes: Legs and glutes
+                exercises:
+                - name: Squats
+                  sets: 4
+                  reps: '10'
+                  rest_period: 90s
+                  notes: ''
+  /workout-days/4/exercises:
+    post:
+      summary: Add exercise to plan
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              name: Barbell Row
+              sets: 4
+              reps: 10-12
+              rest_period: 90s
+              notes: Strict form
+    get:
+      summary: Add exercise to plan
+      responses:
+        '200':
+          description: Successful response
+  /exercises/10:
+    put:
+      summary: Update exercise
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              name: Updated Bench Press
+              sets: 5
+              reps: 6-8
+              rest_period: 120s
+              notes: Heavy load
+  /exercises/16:
+    delete:
+      summary: Delete exercise
+      responses:
+        '200':
+          description: Successful response
+  /nutrition-logs/1:
+    get:
+      summary: Get all logs for user
+      responses:
+        '200':
+          description: Successful response
+  /nutrition-logs:
+    post:
+      summary: Add meal log
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              user_id: 1
+              date: '2025-04-15'
+              meal_type: lunch
+              food_item: Grilled Chicken
+              calories: 450
+              protein: 35
+              carbs: 10
+              fat: 20
+  /nutrition-logs/3:
+    put:
+      summary: Edit meal log
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              date: '2025-04-15'
+              meal_type: dinner
+              food_item: Paneer Tikka
+              calories: 520
+              protein: 32
+              carbs: 15
+              fat: 25
+    delete:
+      summary: Delete log
+      responses:
+        '200':
+          description: Successful response
+  /progress-logs/1:
+    get:
+      summary: Get weight/measurement history
+      responses:
+        '200':
+          description: Successful response
+  /progress-logs:
+    post:
+      summary: Log new entry
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              user_id: 2
+              date: '2025-04-15'
+              weight: 95.6
+              body_fat: 20.5
+              notes: Lost 1kg this week
+  /progress-logs/2:
+    put:
+      summary: Log new entry
+      responses:
+        '200':
+          description: Successful response
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              date: '2025-04-16'
+              weight: 94.8
+              body_fat: 19.8
+              notes: Feeling leaner
+  /progress-logs/3:
+    delete:
+      summary: Log new entry
+      responses:
+        '200':
+          description: Successful response
+  /pr-logs/1:
+    get:
+      summary: Get PR logs
+      responses:
+        '200':
+          description: Successful response

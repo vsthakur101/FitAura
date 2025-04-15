@@ -2,24 +2,24 @@ const express = require('express');
 const router = express.Router();
 
 const {
-    getNutritionLogs,
-    addNutritionLog,
-    updateNutritionLog,
-    deleteNutritionLog
-} = require('../controllers/nutritionController');
+    getProgressLogs,
+    addProgressLog,
+    updateProgressLog,
+    deleteProgressLog
+} = require('../controllers/progressController');
 
 const { verifyToken } = require('../middlewares/authMiddleware');
 
 // ─────────────────────────────────────────────
-// 🍽️ Nutrition Log Routes
+// 📈 Progress Log Routes
 // ─────────────────────────────────────────────
 
 // Fetch all logs for a user
-router.get('/:userId', verifyToken, getNutritionLogs);
+router.get('/:userId', verifyToken, getProgressLogs);
 
-// CRUD for individual log entries
-router.post('/', verifyToken, addNutritionLog);
-router.put('/:id', verifyToken, updateNutritionLog);
-router.delete('/:id', verifyToken, deleteNutritionLog);
+// CRUD operations
+router.post('/', verifyToken, addProgressLog);
+router.put('/:id', verifyToken, updateProgressLog);
+router.delete('/:id', verifyToken, deleteProgressLog);
 
 module.exports = router;

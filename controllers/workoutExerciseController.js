@@ -1,43 +1,47 @@
 const knex = require('../config/db');
+const Joi = require('joi');
+
+// Validation Schemas
+const exerciseSchema = Joi.object({
+    name: Joi.string().min(1).required(),
+    sets: Joi.number().integer().min(1).required(),
+    reps: Joi.number().integer().min(1).required(),
+    rest_period: Joi.number().min(0).required(),
+    notes: Joi.string().allow('', null)
+});
+
 exports.addExerciseToDay = async (req, res) => {
-    const dayId = req.params.id;
-    const { name, sets, reps, rest_period, notes } = req.body;
-    
-    const day = await knex('workout_days').where({ id: dayId }).first();
-    if (!day) return res.status(404).json({ message: 'Workout day not found' });
+    const dayId = parseInt(req.params.id);
+    if (isNaN(dayId)) return res.status(400).json({ message: 'Invalid workout day ID' });
+
+    const { error, value } = exerciseSchema.validate(req.body);
+    if (error) return res.status(400).json({ message: error.message });
 
     try {
+        const day = await knex('workout_days').where({ id: dayId }).first();
+        if (!day) return res.status(404).json({ message: 'Workout day not found' });
+
         const [exercise] = await knex('exercises')
-            .insert({
-                day_id: dayId,
-                name,
-                sets,
-                reps,
-                rest_period,
-                notes
-            })
+            .insert({ day_id: dayId, ...value })
             .returning('*');
 
         res.status(201).json({ message: 'Exercise added', exercise });
     } catch (err) {
-        res.status(500).json({ error: 'Failed to add exercise', detail: err.message });
+        res.status(500).json({ message: 'Failed to add exercise', error: err.message });
     }
 };
 
 exports.updateExercise = async (req, res) => {
-    const exerciseId = req.params.id;
-    const { name, sets, reps, rest_period, notes } = req.body;
+    const exerciseId = parseInt(req.params.id);
+    if (isNaN(exerciseId)) return res.status(400).json({ message: 'Invalid exercise ID' });
+
+    const { error, value } = exerciseSchema.validate(req.body);
+    if (error) return res.status(400).json({ message: error.message });
 
     try {
         const updated = await knex('exercises')
             .where({ id: exerciseId })
-            .update({
-                name,
-                sets,
-                reps,
-                rest_period,
-                notes
-            });
+            .update(value);
 
         if (updated === 0) {
             return res.status(404).json({ message: 'Exercise not found' });
@@ -45,12 +49,13 @@ exports.updateExercise = async (req, res) => {
 
         res.json({ message: 'Exercise updated successfully' });
     } catch (err) {
-        res.status(500).json({ error: 'Failed to update exercise', detail: err.message });
+        res.status(500).json({ message: 'Failed to update exercise', error: err.message });
     }
 };
 
 exports.deleteExercise = async (req, res) => {
-    const exerciseId = req.params.id;
+    const exerciseId = parseInt(req.params.id);
+    if (isNaN(exerciseId)) return res.status(400).json({ message: 'Invalid exercise ID' });
 
     try {
         const deleted = await knex('exercises').where({ id: exerciseId }).del();
@@ -61,19 +66,19 @@ exports.deleteExercise = async (req, res) => {
 
         res.json({ message: 'Exercise deleted successfully' });
     } catch (err) {
-        res.status(500).json({ error: 'Failed to delete exercise', detail: err.message });
+        res.status(500).json({ message: 'Failed to delete exercise', error: err.message });
     }
 };
 
 exports.getExercisesByDay = async (req, res) => {
-    const dayId = req.params.id;
+    const dayId = parseInt(req.params.id);
+    if (isNaN(dayId)) return res.status(400).json({ message: 'Invalid workout day ID' });
 
     try {
-        const exercises = await knex('exercises').where({ day_id: dayId });
+        const exercises = await knex('exercises').where({ day_id: dayId }).orderBy('id', 'asc');
 
         res.json({ exercises });
     } catch (err) {
-        res.status(500).json({ error: 'Failed to fetch exercises', detail: err.message });
+        res.status(500).json({ message: 'Failed to fetch exercises', error: err.message });
     }
 };
-

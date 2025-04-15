@@ -1,16 +1,34 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../controllers/authController');
+const {
+    signup,
+    login,
+    getMe,
+    changePassword,
+    forgotPassword,
+    resetPassword,
+    sendOtp,
+    verifyOtp,
+    logout
+} = require('../controllers/authController');
+
 const { verifyToken } = require('../middlewares/authMiddleware');
 
-router.post('/signup', auth.signup);
-router.post('/login', auth.login);
-router.get('/me', verifyToken, auth.getMe);
-router.put('/change-password', verifyToken, auth.changePassword);
-router.post('/forgot-password', auth.forgotPassword);
-router.post('/reset-password', auth.resetPassword);
-router.post('/send-otp', auth.sendOtp);
-router.post('/verify-otp', auth.verifyOtp);
-router.post('/logout', auth.logout);
+// ─────────────────────────────────────────────
+// 🟢 Public Auth Routes
+// ─────────────────────────────────────────────
+router.post('/signup', signup);
+router.post('/login', login);
+router.post('/forgot-password', forgotPassword);
+router.post('/reset-password', resetPassword);
+router.post('/send-otp', sendOtp);
+router.post('/verify-otp', verifyOtp);
+router.post('/logout', logout); // still public because logout is client-side
+
+// ─────────────────────────────────────────────
+// 🔐 Protected Routes
+// ─────────────────────────────────────────────
+router.get('/me', verifyToken, getMe);
+router.put('/change-password', verifyToken, changePassword);
 
 module.exports = router;
