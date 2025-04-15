@@ -33,15 +33,48 @@ exports.updateUserProfile = async (req, res) => {
 };
 exports.uploadProfilePhoto = async (req, res) => {
   const userId = req.params.id;
-  const filePath = req.file.path;
+
+  if (!req.file) {
+    return res.status(400).json({ message: 'No file received' });
+  }
 
   try {
+    const imageUrl = req.file.path;
+
     await knex('users')
       .where({ id: userId })
-      .update({ profile_photo: filePath, updated_at: new Date() });
+      .update({ profile_photo: imageUrl, updated_at: new Date() });
 
-    res.json({ message: 'Profile photo updated', path: filePath });
+    res.json({ message: 'Photo uploaded to Cloudinary', url: imageUrl });
   } catch (err) {
-    res.status(500).json({ message: 'Error uploading photo', error: err.message });
+    res.status(500).json({ message: 'Upload failed', error: err.message });
+  }
+};
+
+// ✅ Get Progress Logs
+exports.getUserProgress = async (req, res) => {
+  const userId = req.params.id;
+  try {
+    const logs = await knex('progress_logs')
+      .where({ user_id: userId })
+      .orderBy('date', 'desc');
+
+    res.json({ progress: logs });
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching progress logs', error: err.message });
+  }
+};
+
+// ✅ Get Nutrition Logs
+exports.getUserNutrition = async (req, res) => {
+  const userId = req.params.id;
+  try {
+    const logs = await knex('nutrition_logs')
+      .where({ user_id: userId })
+      .orderBy('date', 'desc');
+
+    res.json({ nutrition: logs });
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching nutrition logs', error: err.message });
   }
 };
