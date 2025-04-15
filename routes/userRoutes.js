@@ -1,8 +1,11 @@
 const express = require('express');
 const router = express.Router();
-const userController = require('../controllers/userController');
+const user = require('../controllers/userController');
+const { verifyToken } = require('../middlewares/authMiddleware');
+const upload = require('../middlewares/upload');
 
-router.post('/signup', userController.signup);
-router.post('/login', userController.login);
+router.get('/users/:id', verifyToken, user.getUserById);
+router.put('/users/:id', verifyToken, user.updateUserProfile);
+router.put('/users/:id/profile-photo', verifyToken, upload.single('photo'), user.uploadProfilePhoto);
 
 module.exports = router;
