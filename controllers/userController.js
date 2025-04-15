@@ -1,17 +1,10 @@
 const knex = require('../config/db');
-const Joi = require('joi');
-
-// Validation Schemas
-const updateProfileSchema = Joi.object({
-  name: Joi.string().optional(),
-  bio: Joi.string().allow('').optional(),
-  dob: Joi.date().optional(),
-  gender: Joi.string().valid('male', 'female', 'other').optional()
-});
+const { handleError } = require('../utils/helpers');
+const { updateProfileSchema } = require('../validators/user');
 
 exports.getUserById = async (req, res) => {
-  const userId = parseInt(req.params.id);
-  if (isNaN(userId)) return res.status(400).json({ message: 'Invalid user ID' });
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId)) return res.status(400).json({ message: 'Invalid user ID' });
 
   try {
     const user = await knex('users')
@@ -21,18 +14,18 @@ exports.getUserById = async (req, res) => {
 
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    res.json(user);
+    return res.status(200).json(user);
   } catch (err) {
-    res.status(500).json({ message: 'Error fetching user', error: err.message });
+    return handleError(res, err, 'Error fetching user');
   }
 };
 
 exports.updateUserProfile = async (req, res) => {
-  const userId = parseInt(req.params.id);
-  if (isNaN(userId)) return res.status(400).json({ message: 'Invalid user ID' });
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId)) return res.status(400).json({ message: 'Invalid user ID' });
 
   const { error, value } = updateProfileSchema.validate(req.body);
-  if (error) return res.status(400).json({ message: error.message });
+  if (error) return res.status(400).json({ message: error.details[0].message });
 
   try {
     const updated = await knex('users')
@@ -43,15 +36,15 @@ exports.updateUserProfile = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    res.json({ message: 'User profile updated successfully' });
+    return res.status(200).json({ message: 'User profile updated successfully' });
   } catch (err) {
-    res.status(500).json({ message: 'Error updating profile', error: err.message });
+    return handleError(res, err, 'Error updating profile');
   }
 };
 
 exports.uploadProfilePhoto = async (req, res) => {
-  const userId = parseInt(req.params.id);
-  if (isNaN(userId)) return res.status(400).json({ message: 'Invalid user ID' });
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId)) return res.status(400).json({ message: 'Invalid user ID' });
 
   if (!req.file) {
     return res.status(400).json({ message: 'No file received' });
@@ -68,38 +61,40 @@ exports.uploadProfilePhoto = async (req, res) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    res.json({ message: 'Photo uploaded successfully', url: imageUrl });
+    return res.status(200).json({ message: 'Photo uploaded successfully', url: imageUrl });
   } catch (err) {
-    res.status(500).json({ message: 'Upload failed', error: err.message });
+    return handleError(res, err, 'Upload failed');
   }
 };
 
 exports.getUserProgress = async (req, res) => {
-  const userId = parseInt(req.params.id);
-  if (isNaN(userId)) return res.status(400).json({ message: 'Invalid user ID' });
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId)) return res.status(400).json({ message: 'Invalid user ID' });
 
   try {
     const logs = await knex('progress_logs')
       .where({ user_id: userId })
+      .whereNull('deleted_at')
       .orderBy('date', 'desc');
 
-    res.json({ progress: logs });
+    return res.status(200).json({ progress: logs });
   } catch (err) {
-    res.status(500).json({ message: 'Error fetching progress logs', error: err.message });
+    return handleError(res, err, 'Error fetching progress logs');
   }
 };
 
 exports.getUserNutrition = async (req, res) => {
-  const userId = parseInt(req.params.id);
-  if (isNaN(userId)) return res.status(400).json({ message: 'Invalid user ID' });
+  const userId = Number(req.params.id);
+  if (!Number.isInteger(userId)) return res.status(400).json({ message: 'Invalid user ID' });
 
   try {
     const logs = await knex('nutrition_logs')
       .where({ user_id: userId })
+      .whereNull('deleted_at')
       .orderBy('date', 'desc');
 
-    res.json({ nutrition: logs });
+    return res.status(200).json({ nutrition: logs });
   } catch (err) {
-    res.status(500).json({ message: 'Error fetching nutrition logs', error: err.message });
+    return handleError(res, err, 'Error fetching nutrition logs');
   }
 };

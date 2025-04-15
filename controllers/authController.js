@@ -1,44 +1,10 @@
+// controllers/authController.js
 const knex = require('../config/db');
+const redis = require('../config/redis');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const Joi = require('joi');
-
-const otpStore = {}; // TODO: Replace with PostgreSQL-based table with TTL (e.g. Redis or temporal table)
-
-// Utility to generate JWT
-const generateToken = (payload) => {
-  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
-};
-
-// ------------------ Validators ------------------
-
-const signupSchema = Joi.object({
-  name: Joi.string().required(),
-  email: Joi.string().email().required(),
-  password: Joi.string().min(6).required(),
-  role: Joi.string().valid('admin', 'user', 'beginner').default('user')
-});
-
-const loginSchema = Joi.object({
-  email: Joi.string().email().required(),
-  password: Joi.string().required()
-});
-
-const changePasswordSchema = Joi.object({
-  oldPassword: Joi.string().required(),
-  newPassword: Joi.string().min(6).required()
-});
-
-const otpSchema = Joi.object({
-  phone: Joi.string().pattern(/^[0-9]{10}$/).required()
-});
-
-const otpVerifySchema = Joi.object({
-  phone: Joi.string().pattern(/^[0-9]{10}$/).required(),
-  otp: Joi.string().length(6).required()
-});
-
-// ------------------ Controllers ------------------
+const { signupSchema, loginSchema, changePasswordSchema, otpSchema, otpVerifySchema } = require('../validators/authValidators');
+const { generateToken, sendResetEmail, logError } = require('../utils/helpers');
 
 exports.signup = async (req, res) => {
   try {
@@ -46,16 +12,18 @@ exports.signup = async (req, res) => {
     if (error) return res.status(400).json({ message: error.message });
 
     const { name, email, password, role } = value;
+    const existing = await knex('users').where({ email }).first();
+    if (existing) return res.status(409).json({ message: 'Email already registered' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-
     const [user] = await knex('users')
       .insert({ name, email, password: hashedPassword, role })
       .returning(['id', 'name', 'email', 'role']);
 
     res.status(201).json({ message: 'User registered successfully', user });
   } catch (err) {
-    res.status(500).json({ message: 'Signup failed', detail: err.message });
+    logError('Signup Error', err);
+    res.status(500).json({ message: 'Signup failed' });
   }
 };
 
@@ -66,17 +34,16 @@ exports.login = async (req, res) => {
 
     const { email, password } = value;
     const user = await knex('users').where({ email }).first();
-
-    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (!user) return res.status(404).json({ message: 'Invalid credentials' });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
 
     const token = generateToken({ id: user.id, role: user.role });
-
     res.json({ token });
   } catch (err) {
-    res.status(500).json({ message: 'Login failed', detail: err.message });
+    logError('Login Error', err);
+    res.status(500).json({ message: 'Login failed' });
   }
 };
 
@@ -88,10 +55,10 @@ exports.getMe = async (req, res) => {
       .first();
 
     if (!user) return res.status(404).json({ message: 'User not found' });
-
     res.json(user);
   } catch (err) {
-    res.status(500).json({ message: 'Failed to fetch user', detail: err.message });
+    logError('Fetch Current User Error', err);
+    res.status(500).json({ message: 'Failed to fetch user' });
   }
 };
 
@@ -101,18 +68,19 @@ exports.changePassword = async (req, res) => {
     if (error) return res.status(400).json({ message: error.message });
 
     const { oldPassword, newPassword } = value;
-
     const user = await knex('users').where({ id: req.user.id }).first();
+    if (!user) return res.status(404).json({ message: 'User not found' });
 
     const isMatch = await bcrypt.compare(oldPassword, user.password);
-    if (!isMatch) return res.status(400).json({ message: 'Old password is incorrect' });
+    if (!isMatch) return res.status(400).json({ message: 'Incorrect old password' });
 
     const hashed = await bcrypt.hash(newPassword, 10);
     await knex('users').where({ id: req.user.id }).update({ password: hashed });
 
     res.json({ message: 'Password changed successfully' });
   } catch (err) {
-    res.status(500).json({ message: 'Error changing password', detail: err.message });
+    logError('Change Password Error', err);
+    res.status(500).json({ message: 'Error changing password' });
   }
 };
 
@@ -125,26 +93,28 @@ exports.forgotPassword = async (req, res) => {
     if (!user) return res.status(404).json({ message: 'User not found' });
 
     const resetToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '10m' });
-    // TODO: Send via email in production
-    res.json({ message: 'Use this reset token', resetToken });
+
+    await sendResetEmail(email, resetToken); // placeholder for actual email service
+    res.json({ message: 'Password reset link sent to email' });
   } catch (err) {
-    res.status(500).json({ message: 'Error processing forgot password', detail: err.message });
+    logError('Forgot Password Error', err);
+    res.status(500).json({ message: 'Failed to process forgot password' });
   }
 };
 
 exports.resetPassword = async (req, res) => {
   try {
     const { token, newPassword } = req.body;
-    if (!token || !newPassword) return res.status(400).json({ message: 'Token and new password are required' });
+    if (!token || !newPassword) return res.status(400).json({ message: 'Token and password are required' });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const hashed = await bcrypt.hash(newPassword, 10);
 
     await knex('users').where({ id: decoded.id }).update({ password: hashed });
-
     res.json({ message: 'Password reset successfully' });
   } catch (err) {
-    res.status(400).json({ message: 'Invalid or expired token', detail: err.message });
+    logError('Reset Password Error', err);
+    res.status(400).json({ message: 'Invalid or expired token' });
   }
 };
 
@@ -155,10 +125,13 @@ exports.sendOtp = async (req, res) => {
 
     const { phone } = value;
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    otpStore[phone] = { otp, createdAt: Date.now() };
 
+    // Store OTP in Redis with 5-min TTL
+    await redis.setex(`otp:${phone}`, 300, otp);
+
+    // Send via SMS in real-world, or console for dev
     console.log(`OTP for ${phone}: ${otp}`);
-    res.json({ message: 'OTP sent successfully', otp }); // show only in dev
+    res.json({ message: 'OTP sent successfully', otp }); // Dev only
   } catch (err) {
     res.status(500).json({ message: 'Failed to send OTP', detail: err.message });
   }
@@ -170,25 +143,55 @@ exports.verifyOtp = async (req, res) => {
     if (error) return res.status(400).json({ message: error.message });
 
     const { phone, otp } = value;
-    const storedOtp = otpStore[phone];
 
-    if (!storedOtp || storedOtp.otp !== otp || Date.now() - storedOtp.createdAt > 5 * 60 * 1000) {
+    // Environment-based configuration
+    const MAX_ATTEMPTS = parseInt(process.env.OTP_MAX_RETRIES) || 5;
+    const ATTEMPT_TTL = parseInt(process.env.OTP_RETRY_TTL) || 300;
+
+    const storedOtp = await redis.get(`otp:${phone}`);
+    const retryKey = `otp:attempts:${phone}`;
+
+    const attempts = parseInt(await redis.get(retryKey)) || 0;
+    if (attempts >= MAX_ATTEMPTS) {
+      return res.status(429).json({
+        message: 'Too many failed attempts. Please try again later.'
+      });
+    }
+
+    if (!storedOtp || storedOtp !== otp) {
+      // Increment retry attempts
+      await redis
+        .multi()
+        .incr(retryKey)
+        .expire(retryKey, ATTEMPT_TTL)
+        .exec();
+
       return res.status(401).json({ message: 'Invalid or expired OTP' });
     }
 
+    // OTP is correct – clear stored values
+    await redis.del(`otp:${phone}`);
+    await redis.del(retryKey);
+
+    // Check or create user
     let user = await knex('users').where({ phone }).first();
     if (!user) {
-      const [newUser] = await knex('users').insert({ phone, role: 'beginner' }).returning('*');
+      const [newUser] = await knex('users')
+        .insert({ phone, role: 'beginner' })
+        .returning('*');
       user = newUser;
     }
 
     const token = generateToken({ id: user.id, role: user.role });
     res.json({ message: 'OTP verified', token });
   } catch (err) {
-    res.status(500).json({ message: 'Failed to verify OTP', detail: err.message });
+    res.status(500).json({
+      message: 'Failed to verify OTP',
+      detail: process.env.NODE_ENV === 'development' ? err.message : undefined,
+    });
   }
 };
 
-exports.logout = (req, res) => {
+exports.logout = (_req, res) => {
   res.json({ message: 'User logged out (client should discard token)' });
 };

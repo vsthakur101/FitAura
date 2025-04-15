@@ -1,89 +1,120 @@
 const knex = require('../config/db');
-const Joi = require('joi');
+const { handleError } = require('../utils/helpers');
+const { progressLogSchema, updateProgressLogSchema } = require('../validators/progressLog');
 
-// Validation Schemas
-const progressLogSchema = Joi.object({
-    user_id: Joi.number().required(),
-    date: Joi.date().required(),
-    weight: Joi.number().min(0).required(),
-    body_fat: Joi.number().min(0).optional(),
-    notes: Joi.string().allow('', null)
-});
-
-const updateSchema = Joi.object({
-    date: Joi.date(),
-    weight: Joi.number().min(0),
-    body_fat: Joi.number().min(0),
-    notes: Joi.string().allow('', null)
-});
+// ------------------ Controller Functions ------------------
 
 exports.getProgressLogs = async (req, res) => {
-    const userId = parseInt(req.params.userId);
-    if (isNaN(userId)) return res.status(400).json({ message: 'Invalid user ID' });
+    const userId = Number(req.params.userId);
+    const { page = 1, limit = 10 } = req.query;
+
+    if (!Number.isInteger(userId)) {
+        return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
+    const offset = (page - 1) * limit;
 
     try {
         const logs = await knex('progress_logs')
             .where({ user_id: userId })
-            .orderBy('date', 'desc');
+            .whereNull('deleted_at')
+            .orderBy('date', 'desc')
+            .limit(limit)
+            .offset(offset);
 
-        res.json({ logs });
+        const [{ count }] = await knex('progress_logs')
+            .where({ user_id: userId })
+            .whereNull('deleted_at')
+            .count('*');
+
+        return res.status(200).json({
+            total: Number(count),
+            page: Number(page),
+            limit: Number(limit),
+            logs
+        });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to fetch progress logs', error: err.message });
+        return handleError(res, err, 'Failed to fetch progress logs');
     }
 };
 
 exports.addProgressLog = async (req, res) => {
     const { error, value } = progressLogSchema.validate(req.body);
-    if (error) return res.status(400).json({ message: error.message });
+    if (error) return res.status(400).json({ message: error.details[0].message });
 
     try {
-        const [log] = await knex('progress_logs')
-            .insert(value)
-            .returning('*');
+        const [log] = await knex('progress_logs').insert(value).returning('*');
 
-        res.status(201).json({ message: 'Progress log added', log });
+        await knex('audit_logs').insert({
+            user_id: value.user_id,
+            action: 'CREATE_PROGRESS_LOG',
+            details: JSON.stringify(log),
+            timestamp: new Date()
+        });
+
+        return res.status(201).json({ message: 'Progress log added successfully', log });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to add progress log', error: err.message });
+        return handleError(res, err, 'Failed to add progress log');
     }
 };
 
 exports.updateProgressLog = async (req, res) => {
-    const logId = parseInt(req.params.id);
-    if (isNaN(logId)) return res.status(400).json({ message: 'Invalid log ID' });
+    const logId = Number(req.params.id);
+    if (!Number.isInteger(logId)) {
+        return res.status(400).json({ message: 'Invalid log ID' });
+    }
 
-    const { error, value } = updateSchema.validate(req.body);
-    if (error) return res.status(400).json({ message: error.message });
+    const { error, value } = updateProgressLogSchema.validate(req.body);
+    if (error) return res.status(400).json({ message: error.details[0].message });
 
     try {
-        const updated = await knex('progress_logs')
+        const existing = await knex('progress_logs')
             .where({ id: logId })
-            .update(value);
+            .whereNull('deleted_at')
+            .first();
 
-        if (updated === 0) {
-            return res.status(404).json({ message: 'Progress log not found' });
-        }
+        if (!existing) return res.status(404).json({ message: 'Progress log not found' });
 
-        res.json({ message: 'Progress log updated successfully' });
+        await knex('progress_logs').where({ id: logId }).update(value);
+
+        await knex('audit_logs').insert({
+            user_id: existing.user_id,
+            action: 'UPDATE_PROGRESS_LOG',
+            details: JSON.stringify({ before: existing, after: value }),
+            timestamp: new Date()
+        });
+
+        return res.status(200).json({ message: 'Progress log updated successfully' });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to update progress log', error: err.message });
+        return handleError(res, err, 'Failed to update progress log');
     }
 };
 
 exports.deleteProgressLog = async (req, res) => {
-    const logId = parseInt(req.params.id);
-    if (isNaN(logId)) return res.status(400).json({ message: 'Invalid log ID' });
+    const logId = Number(req.params.id);
+    if (!Number.isInteger(logId)) {
+        return res.status(400).json({ message: 'Invalid log ID' });
+    }
 
     try {
-        const deleted = await knex('progress_logs')
+        const existing = await knex('progress_logs')
             .where({ id: logId })
-            .del();
+            .whereNull('deleted_at')
+            .first();
 
-        if (deleted === 0) {
-            return res.status(404).json({ message: 'Progress log not found' });
-        }
+        if (!existing) return res.status(404).json({ message: 'Progress log not found' });
 
-        res.json({ message: 'Progress log deleted successfully' });
+        await knex('progress_logs').where({ id: logId }).update({ deleted_at: new Date() });
+
+        await knex('audit_logs').insert({
+            user_id: existing.user_id,
+            action: 'DELETE_PROGRESS_LOG',
+            details: JSON.stringify(existing),
+            timestamp: new Date()
+        });
+
+        return res.status(200).json({ message: 'Progress log soft-deleted successfully' });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to delete progress log', error: err.message });
+        return handleError(res, err, 'Failed to delete progress log');
     }
 };

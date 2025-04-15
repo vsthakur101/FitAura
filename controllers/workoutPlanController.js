@@ -1,76 +1,60 @@
 const knex = require('../config/db');
-const Joi = require('joi');
+const { handleError } = require('../utils/helpers');
+const { planSchema } = require('../validators/workoutPlan');
 
-// Validation Schemas
-const planSchema = Joi.object({
-    title: Joi.string().required(),
-    goal: Joi.string().required(),
-    duration_weeks: Joi.number().integer().min(1).required(),
-    level: Joi.string().valid('beginner', 'intermediate', 'advanced').required(),
-    days: Joi.array().items(
-        Joi.object({
-            day_number: Joi.number().integer().required(),
-            title: Joi.string().required(),
-            notes: Joi.string().allow('', null),
-            exercises: Joi.array().items(
-                Joi.object({
-                    name: Joi.string().required(),
-                    sets: Joi.number().integer().min(1).required(),
-                    reps: Joi.number().integer().min(1).required(),
-                    rest_period: Joi.number().min(0).required(),
-                    notes: Joi.string().allow('', null)
-                })
-            ).required()
-        })
-    ).min(1).required()
-});
-
+// Get all workout plans for a user
 exports.getUserWorkoutPlans = async (req, res) => {
-    const userId = parseInt(req.params.id);
-    if (isNaN(userId)) return res.status(400).json({ message: 'Invalid user ID' });
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId)) return res.status(400).json({ message: 'Invalid user ID' });
 
     try {
         const plans = await knex('workout_plans')
             .where({ user_id: userId })
+            .whereNull('deleted_at')
             .orderBy('created_at', 'desc');
 
-        res.json({ plans });
+        return res.json({ plans });
     } catch (err) {
-        res.status(500).json({ message: 'Error fetching workout plans', error: err.message });
+        return handleError(res, err, 'Error fetching workout plans');
     }
 };
 
+// Get full details of a workout plan (with days and exercises)
 exports.getWorkoutPlanDetails = async (req, res) => {
-    const planId = parseInt(req.params.id);
-    if (isNaN(planId)) return res.status(400).json({ message: 'Invalid plan ID' });
+    const planId = Number(req.params.id);
+    if (!Number.isInteger(planId)) return res.status(400).json({ message: 'Invalid plan ID' });
 
     try {
-        const plan = await knex('workout_plans').where({ id: planId }).first();
+        const plan = await knex('workout_plans').where({ id: planId }).whereNull('deleted_at').first();
         if (!plan) return res.status(404).json({ message: 'Workout plan not found' });
 
         const days = await knex('workout_days')
             .where({ plan_id: planId })
+            .whereNull('deleted_at')
             .orderBy('day_number', 'asc');
 
         const daysWithExercises = await Promise.all(
             days.map(async (day) => {
-                const exercises = await knex('exercises').where({ day_id: day.id });
+                const exercises = await knex('exercises')
+                    .where({ day_id: day.id })
+                    .whereNull('deleted_at');
                 return { ...day, exercises };
             })
         );
 
-        res.json({ ...plan, days: daysWithExercises });
+        return res.json({ ...plan, days: daysWithExercises });
     } catch (err) {
-        res.status(500).json({ message: 'Error fetching workout plan', error: err.message });
+        return handleError(res, err, 'Error fetching workout plan');
     }
 };
 
+// Create workout plan with nested days and exercises
 exports.createWorkoutPlan = async (req, res) => {
-    const userId = parseInt(req.params.id);
-    if (isNaN(userId)) return res.status(400).json({ message: 'Invalid user ID' });
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId)) return res.status(400).json({ message: 'Invalid user ID' });
 
     const { error, value } = planSchema.validate(req.body);
-    if (error) return res.status(400).json({ message: error.message });
+    if (error) return res.status(400).json({ message: error.details[0].message });
 
     const trx = await knex.transaction();
     try {
@@ -102,53 +86,84 @@ exports.createWorkoutPlan = async (req, res) => {
             }
         }
 
+        await trx('audit_logs').insert({
+            user_id: req.user.id,
+            action: 'CREATE_WORKOUT_PLAN',
+            details: JSON.stringify({ plan_id: plan.id }),
+            timestamp: new Date()
+        });
+
         await trx.commit();
-        res.status(201).json({ message: 'Workout plan created successfully', plan_id: plan.id });
+        return res.status(201).json({ message: 'Workout plan created successfully', plan_id: plan.id });
     } catch (err) {
         await trx.rollback();
-        res.status(500).json({ error: 'Failed to create workout plan', detail: err.message });
+        return handleError(res, err, 'Failed to create workout plan');
     }
 };
 
+// Update metadata only (title, goal, etc.)
 exports.updateWorkoutPlan = async (req, res) => {
-    const planId = parseInt(req.params.id);
-    if (isNaN(planId)) return res.status(400).json({ message: 'Invalid plan ID' });
+    const planId = Number(req.params.id);
+    if (!Number.isInteger(planId)) return res.status(400).json({ message: 'Invalid plan ID' });
 
     const { title, goal, duration_weeks, level } = req.body;
 
     try {
         const updated = await knex('workout_plans')
             .where({ id: planId })
-            .update({ title, goal, duration_weeks, level });
+            .update({ title, goal, duration_weeks, level, updated_at: new Date() });
 
         if (updated === 0) return res.status(404).json({ message: 'Workout plan not found' });
 
-        res.json({ message: 'Workout plan updated successfully' });
+        await knex('audit_logs').insert({
+            user_id: req.user.id,
+            action: 'UPDATE_WORKOUT_PLAN',
+            details: JSON.stringify({ plan_id: planId }),
+            timestamp: new Date()
+        });
+
+        return res.json({ message: 'Workout plan updated successfully' });
     } catch (err) {
-        res.status(500).json({ error: 'Failed to update workout plan', detail: err.message });
+        return handleError(res, err, 'Failed to update workout plan');
     }
 };
 
+// Soft-delete a plan (and optionally its children)
 exports.deleteWorkoutPlan = async (req, res) => {
-    const planId = parseInt(req.params.id);
-    if (isNaN(planId)) return res.status(400).json({ message: 'Invalid plan ID' });
+    const planId = Number(req.params.id);
+    if (!Number.isInteger(planId)) return res.status(400).json({ message: 'Invalid plan ID' });
 
     const trx = await knex.transaction();
     try {
-        const deleted = await trx('workout_plans').where({ id: planId }).del();
+        const plan = await trx('workout_plans')
+            .where({ id: planId })
+            .whereNull('deleted_at')
+            .first();
 
-        if (deleted === 0) {
+        if (!plan) {
             await trx.rollback();
             return res.status(404).json({ message: 'Workout plan not found' });
         }
 
-        await trx('workout_days').where({ plan_id: planId }).del();
-        // optionally, cascade delete exercises based on orphan days
+        await trx('workout_plans').where({ id: planId }).update({ deleted_at: new Date() });
+
+        const days = await trx('workout_days').where({ plan_id: planId });
+        const dayIds = days.map((d) => d.id);
+
+        await trx('workout_days').whereIn('id', dayIds).update({ deleted_at: new Date() });
+        await trx('exercises').whereIn('day_id', dayIds).update({ deleted_at: new Date() });
+
+        await trx('audit_logs').insert({
+            user_id: req.user.id,
+            action: 'DELETE_WORKOUT_PLAN',
+            details: JSON.stringify({ plan_id: planId }),
+            timestamp: new Date()
+        });
 
         await trx.commit();
-        res.json({ message: 'Workout plan deleted successfully' });
+        return res.status(200).json({ message: 'Workout plan deleted successfully' });
     } catch (err) {
         await trx.rollback();
-        res.status(500).json({ error: 'Failed to delete workout plan', detail: err.message });
+        return handleError(res, err, 'Failed to delete workout plan');
     }
 };

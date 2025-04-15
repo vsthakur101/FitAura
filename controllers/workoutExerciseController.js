@@ -1,21 +1,13 @@
 const knex = require('../config/db');
-const Joi = require('joi');
-
-// Validation Schemas
-const exerciseSchema = Joi.object({
-    name: Joi.string().min(1).required(),
-    sets: Joi.number().integer().min(1).required(),
-    reps: Joi.number().integer().min(1).required(),
-    rest_period: Joi.number().min(0).required(),
-    notes: Joi.string().allow('', null)
-});
+const { handleError } = require('../utils/helpers');
+const { exerciseSchema, updateExerciseSchema } = require('../validators/exercise');
 
 exports.addExerciseToDay = async (req, res) => {
-    const dayId = parseInt(req.params.id);
-    if (isNaN(dayId)) return res.status(400).json({ message: 'Invalid workout day ID' });
+    const dayId = Number(req.params.id);
+    if (!Number.isInteger(dayId)) return res.status(400).json({ message: 'Invalid workout day ID' });
 
     const { error, value } = exerciseSchema.validate(req.body);
-    if (error) return res.status(400).json({ message: error.message });
+    if (error) return res.status(400).json({ message: error.details[0].message });
 
     try {
         const day = await knex('workout_days').where({ id: dayId }).first();
@@ -25,60 +17,80 @@ exports.addExerciseToDay = async (req, res) => {
             .insert({ day_id: dayId, ...value })
             .returning('*');
 
-        res.status(201).json({ message: 'Exercise added', exercise });
+        await knex('audit_logs').insert({
+            user_id: req.user.id,
+            action: 'ADD_EXERCISE',
+            details: JSON.stringify(exercise),
+            timestamp: new Date()
+        });
+
+        return res.status(201).json({ message: 'Exercise added successfully', exercise });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to add exercise', error: err.message });
+        return handleError(res, err, 'Failed to add exercise');
     }
 };
 
 exports.updateExercise = async (req, res) => {
-    const exerciseId = parseInt(req.params.id);
-    if (isNaN(exerciseId)) return res.status(400).json({ message: 'Invalid exercise ID' });
+    const exerciseId = Number(req.params.id);
+    if (!Number.isInteger(exerciseId)) return res.status(400).json({ message: 'Invalid exercise ID' });
 
-    const { error, value } = exerciseSchema.validate(req.body);
-    if (error) return res.status(400).json({ message: error.message });
+    const { error, value } = updateExerciseSchema.validate(req.body);
+    if (error) return res.status(400).json({ message: error.details[0].message });
 
     try {
-        const updated = await knex('exercises')
-            .where({ id: exerciseId })
-            .update(value);
+        const existing = await knex('exercises').where({ id: exerciseId }).whereNull('deleted_at').first();
+        if (!existing) return res.status(404).json({ message: 'Exercise not found' });
 
-        if (updated === 0) {
-            return res.status(404).json({ message: 'Exercise not found' });
-        }
+        await knex('exercises').where({ id: exerciseId }).update(value);
 
-        res.json({ message: 'Exercise updated successfully' });
+        await knex('audit_logs').insert({
+            user_id: req.user.id,
+            action: 'UPDATE_EXERCISE',
+            details: JSON.stringify({ before: existing, after: value }),
+            timestamp: new Date()
+        });
+
+        return res.status(200).json({ message: 'Exercise updated successfully' });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to update exercise', error: err.message });
+        return handleError(res, err, 'Failed to update exercise');
     }
 };
 
 exports.deleteExercise = async (req, res) => {
-    const exerciseId = parseInt(req.params.id);
-    if (isNaN(exerciseId)) return res.status(400).json({ message: 'Invalid exercise ID' });
+    const exerciseId = Number(req.params.id);
+    if (!Number.isInteger(exerciseId)) return res.status(400).json({ message: 'Invalid exercise ID' });
 
     try {
-        const deleted = await knex('exercises').where({ id: exerciseId }).del();
+        const existing = await knex('exercises').where({ id: exerciseId }).whereNull('deleted_at').first();
+        if (!existing) return res.status(404).json({ message: 'Exercise not found' });
 
-        if (deleted === 0) {
-            return res.status(404).json({ message: 'Exercise not found' });
-        }
+        await knex('exercises').where({ id: exerciseId }).update({ deleted_at: new Date() });
 
-        res.json({ message: 'Exercise deleted successfully' });
+        await knex('audit_logs').insert({
+            user_id: req.user.id,
+            action: 'DELETE_EXERCISE',
+            details: JSON.stringify(existing),
+            timestamp: new Date()
+        });
+
+        return res.status(200).json({ message: 'Exercise soft-deleted successfully' });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to delete exercise', error: err.message });
+        return handleError(res, err, 'Failed to delete exercise');
     }
 };
 
 exports.getExercisesByDay = async (req, res) => {
-    const dayId = parseInt(req.params.id);
-    if (isNaN(dayId)) return res.status(400).json({ message: 'Invalid workout day ID' });
+    const dayId = Number(req.params.id);
+    if (!Number.isInteger(dayId)) return res.status(400).json({ message: 'Invalid workout day ID' });
 
     try {
-        const exercises = await knex('exercises').where({ day_id: dayId }).orderBy('id', 'asc');
+        const exercises = await knex('exercises')
+            .where({ day_id: dayId })
+            .whereNull('deleted_at')
+            .orderBy('id', 'asc');
 
-        res.json({ exercises });
+        return res.status(200).json({ exercises });
     } catch (err) {
-        res.status(500).json({ message: 'Failed to fetch exercises', error: err.message });
+        return handleError(res, err, 'Failed to fetch exercises');
     }
 };
