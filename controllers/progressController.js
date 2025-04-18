@@ -1,5 +1,5 @@
 const knex = require('../config/db');
-const { handleError } = require('../utils/helpers');
+const { logError } = require('../utils/helpers');
 const { progressLogSchema, updateProgressLogSchema } = require('../validators/progressLog');
 
 // ------------------ Controller Functions ------------------
@@ -34,7 +34,7 @@ exports.getProgressLogs = async (req, res) => {
             logs
         });
     } catch (err) {
-        return handleError(res, err, 'Failed to fetch progress logs');
+        return logError(res, err, 'Failed to fetch progress logs');
     }
 };
 
@@ -54,7 +54,7 @@ exports.addProgressLog = async (req, res) => {
 
         return res.status(201).json({ message: 'Progress log added successfully', log });
     } catch (err) {
-        return handleError(res, err, 'Failed to add progress log');
+        return logError(res, err, 'Failed to add progress log');
     }
 };
 
@@ -86,7 +86,7 @@ exports.updateProgressLog = async (req, res) => {
 
         return res.status(200).json({ message: 'Progress log updated successfully' });
     } catch (err) {
-        return handleError(res, err, 'Failed to update progress log');
+        return logError(res, err, 'Failed to update progress log');
     }
 };
 
@@ -115,6 +115,6 @@ exports.deleteProgressLog = async (req, res) => {
 
         return res.status(200).json({ message: 'Progress log soft-deleted successfully' });
     } catch (err) {
-        return handleError(res, err, 'Failed to delete progress log');
+        return logError(res, err, 'Failed to delete progress log');
     }
 };

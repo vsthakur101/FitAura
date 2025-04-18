@@ -1,10 +1,9 @@
 // controllers/authController.js
 const knex = require('../config/db');
 const redis = require('../config/redis');
-const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const { signupSchema, loginSchema, changePasswordSchema, otpSchema, otpVerifySchema } = require('../validators/authValidators');
-const { generateToken, sendResetEmail, logError } = require('../utils/helpers');
+const { signupSchema, loginSchema } = require('../validators/authValidators');
+const { generateToken, sendOtpEmail, logError, generateSecureOtp } = require('../utils/helpers');
 
 exports.signup = async (req, res) => {
   try {
@@ -39,8 +38,25 @@ exports.login = async (req, res) => {
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
 
+    if (req.allowedOrigin === process.env.TRAINER_URL && user.role !== 'trainer') {
+      return res.status(403).json({ message: 'Only trainers are allowed to login here' });
+    }
     const token = generateToken({ id: user.id, role: user.role });
-    res.json({ token });
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production', // true only on HTTPS
+      sameSite: 'lax', // or 'strict' based on use case
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+    res.status(200).json({
+      message: 'Login successful',
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
   } catch (err) {
     logError('Login Error', err);
     res.status(500).json({ message: 'Login failed' });
@@ -49,38 +65,25 @@ exports.login = async (req, res) => {
 
 exports.getMe = async (req, res) => {
   try {
+    const token = req.cookies.token;
+    if (!token) {
+      return res.status(401).json({ message: 'Not authenticated' });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
     const user = await knex('users')
-      .where({ id: req.user.id })
       .select('id', 'name', 'email', 'role')
+      .where({ id: decoded.id })
       .first();
 
-    if (!user) return res.status(404).json({ message: 'User not found' });
-    res.json(user);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    return res.status(200).json({ user });
   } catch (err) {
-    logError('Fetch Current User Error', err);
-    res.status(500).json({ message: 'Failed to fetch user' });
-  }
-};
-
-exports.changePassword = async (req, res) => {
-  try {
-    const { error, value } = changePasswordSchema.validate(req.body);
-    if (error) return res.status(400).json({ message: error.message });
-
-    const { oldPassword, newPassword } = value;
-    const user = await knex('users').where({ id: req.user.id }).first();
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    const isMatch = await bcrypt.compare(oldPassword, user.password);
-    if (!isMatch) return res.status(400).json({ message: 'Incorrect old password' });
-
-    const hashed = await bcrypt.hash(newPassword, 10);
-    await knex('users').where({ id: req.user.id }).update({ password: hashed });
-
-    res.json({ message: 'Password changed successfully' });
-  } catch (err) {
-    logError('Change Password Error', err);
-    res.status(500).json({ message: 'Error changing password' });
+    return res.status(401).json({ message: 'Invalid or expired token' });
   }
 };
 
@@ -92,74 +95,111 @@ exports.forgotPassword = async (req, res) => {
     const user = await knex('users').where({ email }).first();
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    const resetToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: '10m' });
+    // Generate secure 4-digit OTP
+    const otp = generateSecureOtp(4);
+    if (!/^\d{4}$/.test(otp)) {
+      console.error('Invalid OTP generated:', otp);
+    }
 
-    await sendResetEmail(email, resetToken); // placeholder for actual email service
-    res.json({ message: 'Password reset link sent to email' });
+    const otpKey = `otp:email:${email}`;
+    const retryKey = `otp:attempts:email:${email}`;
+    const expiryInSeconds = 600; // 10 minutes
+
+    // Store OTP in Redis with expiry
+    await redis.set(otpKey, otp, 'EX', expiryInSeconds);
+    await redis.del(retryKey); // Reset retry count (optional)
+
+    // Send OTP email
+    console.log(`OTP for ${email}: ${otp}`); // Dev only
+    await sendOtpEmail(email, otp);
+
+    return res.status(200).json({ message: 'OTP sent to your email' });
   } catch (err) {
-    logError('Forgot Password Error', err);
-    res.status(500).json({ message: 'Failed to process forgot password' });
+    logError('Forgot Password OTP Error', err);
+    return res.status(500).json({ message: 'Failed to send OTP' });
+  }
+};
+
+exports.updateTrainerPassword = async (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+  const trainerId = req.user.id;
+
+  if (!oldPassword || !newPassword) {
+    return res.status(400).json({ message: 'Both old and new password are required' });
+  }
+
+  try {
+    const user = await knex('users').where({ id: trainerId }).first();
+
+    if (!user || user.role !== 'trainer') {
+      return res.status(403).json({ message: 'Access denied. Only trainers can update password.' });
+    }
+
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Old password is incorrect' });
+    }
+
+    const hashedNew = await bcrypt.hash(newPassword, 10);
+
+    await knex('users').where({ id: trainerId }).update({
+      password: hashedNew,
+      updated_at: new Date()
+    });
+
+    return res.status(200).json({ message: 'Password updated successfully' });
+  } catch (err) {
+    console.error('Password update error:', err);
+    return res.status(500).json({ message: 'Something went wrong' });
   }
 };
 
 exports.resetPassword = async (req, res) => {
   try {
-    const { token, newPassword } = req.body;
-    if (!token || !newPassword) return res.status(400).json({ message: 'Token and password are required' });
+    const { email, newPassword } = req.body;
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const hashed = await bcrypt.hash(newPassword, 10);
+    if (!email || !newPassword) {
+      return res.status(400).json({ message: 'Email and new password are required' });
+    }
 
-    await knex('users').where({ id: decoded.id }).update({ password: hashed });
-    res.json({ message: 'Password reset successfully' });
+    const user = await knex('users').where({ email }).first();
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await knex('users')
+      .where({ email })
+      .update({ password: hashedPassword, updated_at: new Date() });
+
+    return res.status(200).json({ message: 'Password reset successfully' });
   } catch (err) {
     logError('Reset Password Error', err);
-    res.status(400).json({ message: 'Invalid or expired token' });
-  }
-};
-
-exports.sendOtp = async (req, res) => {
-  try {
-    const { error, value } = otpSchema.validate(req.body);
-    if (error) return res.status(400).json({ message: error.message });
-
-    const { phone } = value;
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // Store OTP in Redis with 5-min TTL
-    await redis.setex(`otp:${phone}`, 300, otp);
-
-    // Send via SMS in real-world, or console for dev
-    console.log(`OTP for ${phone}: ${otp}`);
-    res.json({ message: 'OTP sent successfully', otp }); // Dev only
-  } catch (err) {
-    res.status(500).json({ message: 'Failed to send OTP', detail: err.message });
+    return res.status(500).json({ message: 'Failed to reset password' });
   }
 };
 
 exports.verifyOtp = async (req, res) => {
   try {
-    const { error, value } = otpVerifySchema.validate(req.body);
-    if (error) return res.status(400).json({ message: error.message });
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ message: 'Email and OTP are required' });
+    }
 
-    const { phone, otp } = value;
+    const otpKey = `otp:email:${email}`;
+    const retryKey = `otp:attempts:email:${email}`;
+    const MAX_ATTEMPTS = parseInt(process.env.OTP_MAX_RETRIES || '5');
+    const ATTEMPT_TTL = parseInt(process.env.OTP_RETRY_TTL || '300');
 
-    // Environment-based configuration
-    const MAX_ATTEMPTS = parseInt(process.env.OTP_MAX_RETRIES) || 5;
-    const ATTEMPT_TTL = parseInt(process.env.OTP_RETRY_TTL) || 300;
-
-    const storedOtp = await redis.get(`otp:${phone}`);
-    const retryKey = `otp:attempts:${phone}`;
-
+    const storedOtp = await redis.get(otpKey);
     const attempts = parseInt(await redis.get(retryKey)) || 0;
+
     if (attempts >= MAX_ATTEMPTS) {
-      return res.status(429).json({
-        message: 'Too many failed attempts. Please try again later.'
-      });
+      return res.status(429).json({ message: 'Too many failed attempts. Please try again later.' });
     }
 
     if (!storedOtp || storedOtp !== otp) {
-      // Increment retry attempts
       await redis
         .multi()
         .incr(retryKey)
@@ -169,26 +209,14 @@ exports.verifyOtp = async (req, res) => {
       return res.status(401).json({ message: 'Invalid or expired OTP' });
     }
 
-    // OTP is correct – clear stored values
-    await redis.del(`otp:${phone}`);
+    // OTP verified — cleanup
+    await redis.del(otpKey);
     await redis.del(retryKey);
 
-    // Check or create user
-    let user = await knex('users').where({ phone }).first();
-    if (!user) {
-      const [newUser] = await knex('users')
-        .insert({ phone, role: 'beginner' })
-        .returning('*');
-      user = newUser;
-    }
-
-    const token = generateToken({ id: user.id, role: user.role });
-    res.json({ message: 'OTP verified', token });
+    return res.status(200).json({ message: 'OTP verified. You may now reset your password.' });
   } catch (err) {
-    res.status(500).json({
-      message: 'Failed to verify OTP',
-      detail: process.env.NODE_ENV === 'development' ? err.message : undefined,
-    });
+    logError('Verify Forgot OTP Error', err);
+    return res.status(500).json({ message: 'Failed to verify OTP' });
   }
 };
 

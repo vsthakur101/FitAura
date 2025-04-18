@@ -1,5 +1,5 @@
 const knex = require('../config/db');
-const { handleError } = require('../utils/helpers');
+const { logError } = require('../utils/helpers');
 const { exerciseSchema, updateExerciseSchema } = require('../validators/exercise');
 
 exports.addExerciseToDay = async (req, res) => {
@@ -26,7 +26,7 @@ exports.addExerciseToDay = async (req, res) => {
 
         return res.status(201).json({ message: 'Exercise added successfully', exercise });
     } catch (err) {
-        return handleError(res, err, 'Failed to add exercise');
+        return logError(res, err, 'Failed to add exercise');
     }
 };
 
@@ -52,7 +52,7 @@ exports.updateExercise = async (req, res) => {
 
         return res.status(200).json({ message: 'Exercise updated successfully' });
     } catch (err) {
-        return handleError(res, err, 'Failed to update exercise');
+        return logError(res, err, 'Failed to update exercise');
     }
 };
 
@@ -75,7 +75,7 @@ exports.deleteExercise = async (req, res) => {
 
         return res.status(200).json({ message: 'Exercise soft-deleted successfully' });
     } catch (err) {
-        return handleError(res, err, 'Failed to delete exercise');
+        return logError(res, err, 'Failed to delete exercise');
     }
 };
 
@@ -91,6 +91,6 @@ exports.getExercisesByDay = async (req, res) => {
 
         return res.status(200).json({ exercises });
     } catch (err) {
-        return handleError(res, err, 'Failed to fetch exercises');
+        return logError(res, err, 'Failed to fetch exercises');
     }
 };

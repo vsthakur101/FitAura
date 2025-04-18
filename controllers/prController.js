@@ -1,5 +1,5 @@
 const knex = require('../config/db');
-const { handleError } = require('../utils/helpers');
+const { logError } = require('../utils/helpers');
 const { prLogSchema, updatePRLogSchema } = require('../validators/prLog');
 
 // ------------------ Controller Functions ------------------
@@ -17,7 +17,7 @@ exports.getPRLogs = async (req, res) => {
 
         return res.status(200).json({ logs });
     } catch (err) {
-        return handleError(res, err, 'Failed to fetch PR logs');
+        return logError(res, err, 'Failed to fetch PR logs');
     }
 };
 
@@ -29,7 +29,7 @@ exports.addPRLog = async (req, res) => {
         const [log] = await knex('pr_logs').insert(value).returning('*');
         return res.status(201).json({ message: 'PR log added successfully', log });
     } catch (err) {
-        return handleError(res, err, 'Failed to add PR log');
+        return logError(res, err, 'Failed to add PR log');
     }
 };
 
@@ -53,7 +53,7 @@ exports.updatePRLog = async (req, res) => {
 
         return res.status(200).json({ message: 'PR log updated successfully' });
     } catch (err) {
-        return handleError(res, err, 'Failed to update PR log');
+        return logError(res, err, 'Failed to update PR log');
     }
 };
 
@@ -74,6 +74,6 @@ exports.deletePRLog = async (req, res) => {
 
         return res.status(200).json({ message: 'PR log deleted successfully' });
     } catch (err) {
-        return handleError(res, err, 'Failed to delete PR log');
+        return logError(res, err, 'Failed to delete PR log');
     }
 };

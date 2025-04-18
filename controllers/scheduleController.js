@@ -1,5 +1,5 @@
 const knex = require('../config/db');
-const { handleError } = require('../utils/helpers');
+const { logError } = require('../utils/helpers');
 
 exports.getUserSchedule = async (req, res) => {
     const userId = req.params.userId;
@@ -41,7 +41,7 @@ exports.getUserSchedule = async (req, res) => {
             schedule: detailedDays
         });
     } catch (err) {
-        handleError(res, 'Failed to fetch user schedule', err);
+        logError(res, 'Failed to fetch user schedule', err);
     }
 };
 
@@ -63,7 +63,7 @@ exports.createReminder = async (req, res) => {
 
         res.status(201).json({ message: 'Reminder scheduled successfully', data: reminder });
     } catch (err) {
-        handleError(res, 'Failed to schedule reminder', err);
+        logError(res, 'Failed to schedule reminder', err);
     }
 };
 exports.updateReminder = async (req, res) => {
@@ -97,7 +97,7 @@ exports.updateReminder = async (req, res) => {
             data: updated
         });
     } catch (err) {
-        handleError(res, 'Failed to update reminder', err);
+        logError(res, 'Failed to update reminder', err);
     }
 };
 exports.deleteReminder = async (req, res) => {
@@ -115,6 +115,6 @@ exports.deleteReminder = async (req, res) => {
 
         res.status(200).json({ message: 'Reminder deleted successfully' });
     } catch (err) {
-        handleError(res, 'Failed to delete reminder', err);
+        logError(res, 'Failed to delete reminder', err);
     }
 };

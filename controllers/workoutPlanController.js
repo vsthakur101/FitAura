@@ -1,5 +1,5 @@
 const knex = require('../config/db');
-const { handleError } = require('../utils/helpers');
+const { logError } = require('../utils/helpers');
 const { planSchema } = require('../validators/workoutPlan');
 
 // Get all workout plans for a user
@@ -15,7 +15,7 @@ exports.getUserWorkoutPlans = async (req, res) => {
 
         return res.json({ plans });
     } catch (err) {
-        return handleError(res, err, 'Error fetching workout plans');
+        return logError(res, err, 'Error fetching workout plans');
     }
 };
 
@@ -44,7 +44,7 @@ exports.getWorkoutPlanDetails = async (req, res) => {
 
         return res.json({ ...plan, days: daysWithExercises });
     } catch (err) {
-        return handleError(res, err, 'Error fetching workout plan');
+        return logError(res, err, 'Error fetching workout plan');
     }
 };
 
@@ -97,7 +97,7 @@ exports.createWorkoutPlan = async (req, res) => {
         return res.status(201).json({ message: 'Workout plan created successfully', plan_id: plan.id });
     } catch (err) {
         await trx.rollback();
-        return handleError(res, err, 'Failed to create workout plan');
+        return logError(res, err, 'Failed to create workout plan');
     }
 };
 
@@ -124,7 +124,7 @@ exports.updateWorkoutPlan = async (req, res) => {
 
         return res.json({ message: 'Workout plan updated successfully' });
     } catch (err) {
-        return handleError(res, err, 'Failed to update workout plan');
+        return logError(res, err, 'Failed to update workout plan');
     }
 };
 
@@ -164,6 +164,6 @@ exports.deleteWorkoutPlan = async (req, res) => {
         return res.status(200).json({ message: 'Workout plan deleted successfully' });
     } catch (err) {
         await trx.rollback();
-        return handleError(res, err, 'Failed to delete workout plan');
+        return logError(res, err, 'Failed to delete workout plan');
     }
 };

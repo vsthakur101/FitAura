@@ -1,5 +1,5 @@
 const knex = require('../config/db');
-const { handleError } = require('../utils/helpers');
+const { logError } = require('../utils/helpers');
 const {
     nutritionLogSchema,
     updateNutritionLogSchema
@@ -19,7 +19,7 @@ exports.getNutritionLogs = async (req, res) => {
 
         return res.status(200).json({ logs });
     } catch (error) {
-        return handleError(res, error, 'Failed to fetch nutrition logs');
+        return logError(res, error, 'Failed to fetch nutrition logs');
     }
 };
 
@@ -34,7 +34,7 @@ exports.addNutritionLog = async (req, res) => {
 
         return res.status(201).json({ message: 'Nutrition log added successfully', log });
     } catch (error) {
-        return handleError(res, error, 'Failed to add nutrition log');
+        return logError(res, error, 'Failed to add nutrition log');
     }
 };
 
@@ -58,7 +58,7 @@ exports.updateNutritionLog = async (req, res) => {
 
         return res.status(200).json({ message: 'Nutrition log updated successfully' });
     } catch (error) {
-        return handleError(res, error, 'Failed to update nutrition log');
+        return logError(res, error, 'Failed to update nutrition log');
     }
 };
 
@@ -79,6 +79,6 @@ exports.deleteNutritionLog = async (req, res) => {
 
         return res.status(200).json({ message: 'Nutrition log deleted successfully' });
     } catch (error) {
-        return handleError(res, error, 'Failed to delete nutrition log');
+        return logError(res, error, 'Failed to delete nutrition log');
     }
 };

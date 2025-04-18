@@ -1,5 +1,5 @@
 const knex = require('../config/db');
-const { handleError } = require('../utils/helpers');
+const { logError } = require('../utils/helpers');
 const { updateProfileSchema } = require('../validators/user');
 
 exports.getUserById = async (req, res) => {
@@ -16,7 +16,7 @@ exports.getUserById = async (req, res) => {
 
     return res.status(200).json(user);
   } catch (err) {
-    return handleError(res, err, 'Error fetching user');
+    return logError(res, err, 'Error fetching user');
   }
 };
 
@@ -38,7 +38,7 @@ exports.updateUserProfile = async (req, res) => {
 
     return res.status(200).json({ message: 'User profile updated successfully' });
   } catch (err) {
-    return handleError(res, err, 'Error updating profile');
+    return logError(res, err, 'Error updating profile');
   }
 };
 
@@ -63,7 +63,7 @@ exports.uploadProfilePhoto = async (req, res) => {
 
     return res.status(200).json({ message: 'Photo uploaded successfully', url: imageUrl });
   } catch (err) {
-    return handleError(res, err, 'Upload failed');
+    return logError(res, err, 'Upload failed');
   }
 };
 
@@ -79,7 +79,7 @@ exports.getUserProgress = async (req, res) => {
 
     return res.status(200).json({ progress: logs });
   } catch (err) {
-    return handleError(res, err, 'Error fetching progress logs');
+    return logError(res, err, 'Error fetching progress logs');
   }
 };
 
@@ -95,6 +95,6 @@ exports.getUserNutrition = async (req, res) => {
 
     return res.status(200).json({ nutrition: logs });
   } catch (err) {
-    return handleError(res, err, 'Error fetching nutrition logs');
+    return logError(res, err, 'Error fetching nutrition logs');
   }
 };

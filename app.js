@@ -3,11 +3,17 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
 const { swaggerUi, swaggerDocument } = require('./swagger');
 require('dotenv').config();
 
 const app = express();
+const allowedOrigins = [process.env.TRAINER_URL, process.env.CLIENT_URL];
 
+app.use(cors({
+  origin: [process.env.CLIENT_URL, process.env.TRAINER_URL],
+  credentials: true
+}));
 // Serve Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
@@ -24,9 +30,9 @@ const scheduleRoutes = require('./routes/scheduleRoutes');
 
 // MIDDLEWARES
 app.use(express.json());
-app.use(cors());
 app.use(helmet());
 app.use(morgan('dev'));
+app.use(cookieParser());
 
 // Apply rate limiter to all requests
 const limiter = rateLimit({

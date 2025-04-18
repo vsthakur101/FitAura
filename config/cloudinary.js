@@ -18,6 +18,6 @@ const storage = new CloudinaryStorage({
         public_id: (req, file) => `user_${Date.now()}`
     },
 });
-
+console.log('Cloudinary Storage Configured:', process.env.CLOUDINARY_CLOUD_NAME);
 const upload = multer({ storage });
 module.exports = upload;
